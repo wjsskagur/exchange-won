@@ -1,0 +1,6 @@
+/*
+ * settings.gradle
+ * 프로젝트 루트 이름 정의
+ * 멀티 모듈 구성 시 여기에 include 'module-name' 추가
+ */
+rootProject.name = 'forex-order-system'

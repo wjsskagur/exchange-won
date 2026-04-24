@@ -1,0 +1,66 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.2.5'
+    id 'io.spring.dependency-management' version '1.1.4'
+}
+
+group = 'com.switchwon'
+version = '1.0.0'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+/*
+ * Lombok 어노테이션 프로세서 설정
+ * Gradle은 컴파일 classpath와 어노테이션 프로세서 classpath를 분리 관리하므로
+ * compileOnly + annotationProcessor 두 가지를 모두 선언해야 함
+ * Maven의 <optional>true</optional>와 동일한 역할
+ */
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Spring Boot Web - REST API
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+
+    // Spring Boot Data JPA - ORM
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+
+    // Bean Validation (@NotNull, @DecimalMin 등)
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // H2 In-Memory DB - 런타임에만 필요
+    runtimeOnly 'com.h2database:h2'
+
+    // Lombok - 컴파일 타임에만 필요 (바이트코드 생성 후 불필요)
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    // Test
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+
+    // 테스트에서도 Lombok 사용 시 필요
+    testCompileOnly 'org.projectlombok:lombok'
+    testAnnotationProcessor 'org.projectlombok:lombok'
+}
+
+tasks.named('test') {
+    /*
+     * JUnit 5 (JUnit Platform) 사용 선언
+     * 없으면 'No tests were found' 오류 발생
+     */
+    useJUnitPlatform()
+}
+
+bootJar {
+    archiveFileName = 'forex-order-system.jar'
+}

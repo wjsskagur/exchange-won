@@ -78,7 +78,7 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     public List<OrderDto> getOrderList() {
-        return orderRepository.findAllByOrderByCreatedAtDesc()
+        return orderRepository.findAllByOrderByCreatedAt()
             .stream()
             .map(OrderDto::fromWithId)
             .toList();

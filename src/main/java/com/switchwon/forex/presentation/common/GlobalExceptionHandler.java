@@ -12,19 +12,6 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
-/**
- * 전역 예외 핸들러
- *
- * @RestControllerAdvice 사용 이유:
- * - 모든 컨트롤러에서 발생하는 예외를 한 곳에서 처리
- * - 각 서비스/컨트롤러에 try-catch 분산 방지
- * - 일관된 에러 응답 포맷 보장
- *
- * 예외 계층별 처리:
- * 1. 도메인 예외 (비즈니스 로직 오류) → 4xx
- * 2. 입력값 검증 실패 → 400
- * 3. 예상치 못한 예외 → 500
- */
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -58,7 +45,6 @@ public class GlobalExceptionHandler {
             .map(fe -> fe.getField() + ": " + fe.getDefaultMessage())
             .findFirst()
             .orElse("입력값이 올바르지 않습니다.");
-
         log.warn("입력값 검증 실패: {}", message);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
             .body(ApiResponse.error("INVALID_INPUT", message));
@@ -74,9 +60,14 @@ public class GlobalExceptionHandler {
             .body(ApiResponse.error("INVALID_INPUT", "지원하지 않는 통화 코드이거나 요청 형식이 잘못되었습니다. (지원: USD, JPY, CNY, EUR, KRW)"));
     }
 
+    /**
+     * 정적 리소스 없음 (favicon.ico 등 브라우저 자동 요청)
+     * Exception.class 핸들러에서 처리하지 않도록 별도 분리
+     * → 404로 조용히 처리 (ERROR 로그 불필요)
+     */
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<Void> handleNoResourceFound(NoResourceFoundException e) {
-        log.debug("정적 리소스 없음: {}", e.getResourcePath()); // DEBUG 레벨로 조용히 처리
+        log.debug("정적 리소스 없음: {}", e.getResourcePath());
         return ResponseEntity.notFound().build();
     }
 

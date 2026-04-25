@@ -70,7 +70,7 @@ public class ExchangeRate {
         rate.tradeStanRate = tradeStanRate;
         rate.buyRate = buyRate;
         rate.sellRate = sellRate;
-        rate.createdAt = LocalDateTime.now();
+        rate.createdAt = LocalDateTime.now().withNano(0);
         return rate;
     }
 }

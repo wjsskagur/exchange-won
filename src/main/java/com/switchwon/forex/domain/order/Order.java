@@ -68,7 +68,7 @@ public class Order {
         order.toAmount = toAmount;
         order.toCurrency = toCurrency;
         order.tradeRate = tradeRate;
-        order.createdAt = LocalDateTime.now();
+        order.createdAt = LocalDateTime.now().withNano(0);
         return order;
     }
 }

@@ -8,18 +8,12 @@ import java.math.RoundingMode;
 /**
  * 환율 계산 유틸리티 (순수 계산 로직)
  *
- * Static Utility Class로 설계한 이유:
- * - 외부 의존성 없는 순수 계산 로직 → 인스턴스화 불필요
- * - 테스트 시 Spring 컨텍스트 없이 직접 단위 테스트 가능
- *
- * BigDecimal 사용 이유:
- * - double/float은 부동소수점 오차 발생 (0.1 + 0.2 = 0.30000000000000004)
- * - 금융 계산은 정확한 십진수 연산이 필수
- *
- * 정밀도 전략:
- * - 중간 계산: scale=10 (정밀도 유지)
- * - 환율 최종값: scale=2, HALF_UP  (과제: 소수점 둘째 자리 반올림)
- * - KRW 금액: scale=0, FLOOR       (과제: 원화 소수점 이하 버림)
+ * JPY 100엔 단위 처리 전략:
+ * - DB 저장 및 API 응답: 100엔 기준 (e.g. tradeStanRate=910.00, buyRate=955.50)
+ * - 주문 금액 계산: 1엔 기준으로 변환 후 계산 (toUnitRate)
+ *   이유: forexAmount=500은 500엔을 의미하므로
+ *         500 × 955.50(100엔 기준) = 477,750 → 잘못된 계산
+ *         500 × 9.555(1엔 기준)   = 4,777   → 올바른 계산
  */
 public class ExchangeRateCalculator {
 
@@ -48,15 +42,13 @@ public class ExchangeRateCalculator {
     }
 
     /**
-     * API 응답값(1 KRW 기준 외화량)을 매매기준율(1외화 기준 KRW)로 변환
+     * API 응답값(1 KRW 기준 외화량)을 매매기준율(외화 기준 KRW)로 변환
      *
-     * open.er-api.com /KRW 응답: { "USD": 0.000724, ... }
-     * 의미: 1 KRW = 0.000724 USD
-     * 역수: 1 USD = 1 / 0.000724 = 1381.21 KRW
+     * open.er-api.com /KRW 응답: { "USD": 0.000724, "JPY": 0.10989, ... }
+     * 의미: 1 KRW = 0.000724 USD → 역수 → 1 USD = 1381.21 KRW
      *
-     * JPY 특례 (과제 요구사항):
-     * API는 1엔 기준이나, 국내 표준인 100엔 단위로 환산
-     * 1 JPY = 9.10 KRW → × 100 → 100 JPY = 910.00 KRW
+     * JPY 특례 (과제 요구사항: 100엔 단위 표시):
+     * 1 JPY = 9.10 KRW → × 100 → 100 JPY = 910.00 KRW (DB/응답 저장값)
      */
     public static BigDecimal toTradeStanRate(BigDecimal apiRate, Currency currency) {
         if (apiRate == null || apiRate.compareTo(BigDecimal.ZERO) == 0) {
@@ -66,29 +58,45 @@ public class ExchangeRateCalculator {
         BigDecimal krwPerUnit = BigDecimal.ONE.divide(apiRate, 10, RoundingMode.HALF_UP);
 
         if (currency.isJpy()) {
-            krwPerUnit = krwPerUnit.multiply(JPY_UNIT);
+            krwPerUnit = krwPerUnit.multiply(JPY_UNIT);  // 1엔 → 100엔 기준으로 변환
         }
 
         return krwPerUnit.setScale(2, RoundingMode.HALF_UP);
     }
 
     /**
-     * KRW → 외화 매수 시 필요한 원화 금액 계산
-     * fromAmount(KRW) = forexAmount × buyRate → Floor
+     * JPY 100엔 기준 환율을 1엔 기준으로 변환
+     *
+     * 주문 계산 시 사용:
+     * - buyRate/sellRate는 100엔 기준으로 DB에 저장됨
+     * - forexAmount는 실제 엔화 단위 (e.g. 500엔)
+     * - 계산 시 1엔 기준 환율이 필요
+     *
+     * e.g. buyRate=955.50 (100엔 기준) → 9.5550 (1엔 기준)
      */
-    public static BigDecimal calcKrwFromForex(BigDecimal forexAmount, BigDecimal buyRate) {
+    public static BigDecimal toUnitRate(BigDecimal hundredYenRate) {
+        return hundredYenRate.divide(JPY_UNIT, 10, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * KRW → 외화 매수 시 필요한 원화 금액 계산
+     * fromAmount(KRW) = forexAmount × effectiveRate → Floor
+     * (JPY의 경우 effectiveRate는 1엔 기준으로 변환된 값)
+     */
+    public static BigDecimal calcKrwFromForex(BigDecimal forexAmount, BigDecimal effectiveRate) {
         return forexAmount
-            .multiply(buyRate)
+            .multiply(effectiveRate)
             .setScale(0, RoundingMode.FLOOR);
     }
 
     /**
      * 외화 → KRW 매도 시 받을 원화 금액 계산
-     * toAmount(KRW) = forexAmount × sellRate → Floor
+     * toAmount(KRW) = forexAmount × effectiveRate → Floor
+     * (JPY의 경우 effectiveRate는 1엔 기준으로 변환된 값)
      */
-    public static BigDecimal calcKrwToForex(BigDecimal forexAmount, BigDecimal sellRate) {
+    public static BigDecimal calcKrwToForex(BigDecimal forexAmount, BigDecimal effectiveRate) {
         return forexAmount
-            .multiply(sellRate)
+            .multiply(effectiveRate)
             .setScale(0, RoundingMode.FLOOR);
     }
 }

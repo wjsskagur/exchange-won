@@ -19,9 +19,15 @@ import java.util.List;
 /**
  * 외화 주문 서비스
  *
+ * JPY 100엔 단위 주의사항:
+ * - DB/응답의 buyRate, sellRate는 100엔 기준으로 저장됨 (e.g. 955.50 = 100엔당 KRW)
+ * - 주문 계산 시 forexAmount는 실제 엔화 금액 (e.g. forexAmount=500 → 500엔)
+ * - 따라서 JPY 주문 시 실제 적용 환율(tradeRate)은 1엔 기준으로 변환 후 계산
+ *   500엔 × (955.50 / 100) = 500 × 9.555 = 4,777원
+ *
  * 주문 방향별 적용 환율:
- * - KRW → 외화 (매수): buyRate  (+5% 가산) - 고객이 외화를 사는 가격, 은행에 유리
- * - 외화 → KRW (매도): sellRate (-5% 차감) - 고객이 외화를 파는 가격, 은행에 유리
+ * - KRW → 외화 (매수): buyRate  (+5% 가산)
+ * - 외화 → KRW (매도): sellRate (-5% 차감)
  */
 @Slf4j
 @Service
@@ -31,18 +37,10 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final ExchangeRateRepository exchangeRateRepository;
 
-    /**
-     * 외화 주문 처리
-     *
-     * @Transactional 이유:
-     * 환율 조회 + 주문 저장을 하나의 트랜잭션으로 묶어
-     * 환율은 읽혔으나 주문이 저장 안 되는 부정합 상황 방지
-     */
     @Transactional
     public OrderDto placeOrder(BigDecimal forexAmount, Currency fromCurrency, Currency toCurrency) {
         validateOrderCurrencies(fromCurrency, toCurrency);
 
-        // KRW가 아닌 쪽이 외화
         Currency foreignCurrency = fromCurrency.isForeign() ? fromCurrency : toCurrency;
 
         ExchangeRate latestRate = exchangeRateRepository
@@ -53,12 +51,20 @@ public class OrderService {
         if (fromCurrency == Currency.KRW) {
             // Case A: KRW → 외화 매수 (buyRate 적용)
             BigDecimal buyRate = latestRate.getBuyRate();
-            BigDecimal krwAmount = ExchangeRateCalculator.calcKrwFromForex(forexAmount, buyRate);
+            // JPY는 buyRate가 100엔 기준이므로 1엔 기준으로 변환하여 계산
+            BigDecimal effectiveRate = foreignCurrency.isJpy()
+                ? ExchangeRateCalculator.toUnitRate(buyRate)
+                : buyRate;
+            BigDecimal krwAmount = ExchangeRateCalculator.calcKrwFromForex(forexAmount, effectiveRate);
             order = Order.of(krwAmount, Currency.KRW, forexAmount, toCurrency, buyRate);
         } else {
             // Case B: 외화 → KRW 매도 (sellRate 적용)
             BigDecimal sellRate = latestRate.getSellRate();
-            BigDecimal krwAmount = ExchangeRateCalculator.calcKrwToForex(forexAmount, sellRate);
+            // JPY는 sellRate가 100엔 기준이므로 1엔 기준으로 변환하여 계산
+            BigDecimal effectiveRate = foreignCurrency.isJpy()
+                ? ExchangeRateCalculator.toUnitRate(sellRate)
+                : sellRate;
+            BigDecimal krwAmount = ExchangeRateCalculator.calcKrwToForex(forexAmount, effectiveRate);
             order = Order.of(forexAmount, fromCurrency, krwAmount, Currency.KRW, sellRate);
         }
 
@@ -78,9 +84,6 @@ public class OrderService {
             .toList();
     }
 
-    /**
-     * 허용 조합: KRW↔외화만 (외화↔외화, KRW↔KRW 불가)
-     */
     private void validateOrderCurrencies(Currency from, Currency to) {
         boolean valid = (from == Currency.KRW && to.isForeign())
                      || (from.isForeign() && to == Currency.KRW);

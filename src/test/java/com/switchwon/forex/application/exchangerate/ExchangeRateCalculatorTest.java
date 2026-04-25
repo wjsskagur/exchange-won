@@ -86,3 +86,15 @@ class ExchangeRateCalculatorTest {
         ).isInstanceOf(IllegalArgumentException.class);
     }
 }
+
+    @Test
+    @DisplayName("JPY 주문 계산: toUnitRate로 100엔 기준 → 1엔 기준 변환")
+    void toUnitRate_jpy() {
+        // buyRate 955.50 (100엔 기준) → 1엔 기준 9.5550
+        BigDecimal buyRate100 = new BigDecimal("955.50");
+        BigDecimal unitRate = ExchangeRateCalculator.toUnitRate(buyRate100);
+
+        // 500엔 매수 시 필요한 KRW: 500 × 9.555 = 4777.5 → floor = 4777
+        BigDecimal krw = ExchangeRateCalculator.calcKrwFromForex(new BigDecimal("500"), unitRate);
+        assertThat(krw).isEqualByComparingTo(new BigDecimal("4777"));
+    }
